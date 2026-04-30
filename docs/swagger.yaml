@@ -1,0 +1,783 @@
+openapi: 3.0.3
+info:
+  title: Daily Planner API
+  version: 1.0.0
+  description: |
+    REST API specification for the Daily Planner backend described by Jira epic `KAN-1`
+    and its child stories.
+
+    The backend is intended to be implemented with Express, JWT authentication middleware,
+    and in-memory persistence separated into `routes`, `controllers`, `service`, and `model`
+    layers.
+
+    Seeded users:
+    - `alice` / `planner123`
+    - `bruno` / `planner123`
+    - `carla` / `planner123`
+
+    The database is pre-populated with one week of non-overlapping tasks for each user.
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+tags:
+  - name: Auth
+    description: Registration and login endpoints
+  - name: Tasks
+    description: Authenticated planner task management endpoints
+  - name: Docs
+    description: Swagger rendering endpoint
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      description: Creates a new planner user with a unique username and password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              newUser:
+                summary: Register a new user
+                value:
+                  username: diego
+                  password: planner123
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+              examples:
+                registeredUser:
+                  summary: Successful registration
+                  value:
+                    message: User registered successfully
+                    user:
+                      id: user-004
+                      username: diego
+        '400':
+          description: Invalid input or duplicate username
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                duplicateUsername:
+                  summary: Username already exists
+                  value:
+                    error: ValidationError
+                    message: Username already exists
+                    statusCode: 400
+                missingField:
+                  summary: Missing required field
+                  value:
+                    error: ValidationError
+                    message: Username and password are required
+                    statusCode: 400
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Log in and receive a JWT token
+      description: Authenticates a registered user and returns a bearer token for future requests.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              seededUser:
+                summary: Login with a seeded user
+                value:
+                  username: alice
+                  password: planner123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSuccessResponse'
+              examples:
+                loginSuccess:
+                  summary: Seeded user login
+                  value:
+                    message: Login successful
+                    token: <jwt-token>
+                    user:
+                      id: user-001
+                      username: alice
+        '400':
+          description: Missing username or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingCredentials:
+                  value:
+                    error: ValidationError
+                    message: Username and password are required
+                    statusCode: 400
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value:
+                    error: AuthenticationError
+                    message: Invalid username or password
+                    statusCode: 401
+  /tasks:
+    post:
+      tags:
+        - Tasks
+      summary: Create a task
+      description: |
+        Creates a task for the authenticated user on a specific date with a start and end time.
+        Tasks may be in the past. Tasks for the same day must not overlap, but adjacent tasks
+        are allowed when one task ends exactly when another starts.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+            examples:
+              addTaskForAlice:
+                summary: Add a task for Alice
+                value:
+                  date: '2026-05-01'
+                  startTime: '12:30'
+                  endTime: '13:00'
+                  title: Grocery pickup
+                  notes: Collect vegetables and fruit after lunch
+      responses:
+        '201':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+              examples:
+                createdTask:
+                  value:
+                    message: Task created successfully
+                    task:
+                      id: task-0010
+                      userId: user-001
+                      date: '2026-05-01'
+                      startTime: '12:30'
+                      endTime: '13:00'
+                      title: Grocery pickup
+                      notes: Collect vegetables and fruit after lunch
+        '400':
+          description: Invalid data or overlapping schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidTimeRange:
+                  value:
+                    error: ValidationError
+                    message: End time must be after start time
+                    statusCode: 400
+                overlappingTask:
+                  value:
+                    error: ConflictError
+                    message: Task overlaps an existing task for this day
+                    statusCode: 400
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    put:
+      tags:
+        - Tasks
+      summary: Replace all tasks for a specific day
+      description: |
+        Replaces the authenticated user's full schedule for the provided date.
+        The new task list must contain non-overlapping tasks and each task must belong to the
+        authenticated user.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceDayRequest'
+            examples:
+              replaceAliceDay:
+                summary: Replace Alice's tasks for a day
+                value:
+                  date: '2026-05-01'
+                  tasks:
+                    - startTime: '08:00'
+                      endTime: '09:00'
+                      title: Morning run
+                      notes: Park loop
+                    - startTime: '09:00'
+                      endTime: '09:30'
+                      title: Breakfast
+                      notes: Protein smoothie
+                    - startTime: '10:00'
+                      endTime: '11:30'
+                      title: Study session
+                      notes: Review Express middleware
+      responses:
+        '200':
+          description: Day updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayTasksResponse'
+              examples:
+                updatedDay:
+                  value:
+                    message: Day updated successfully
+                    date: '2026-05-01'
+                    tasks:
+                      - id: task-0011
+                        userId: user-001
+                        date: '2026-05-01'
+                        startTime: '08:00'
+                        endTime: '09:00'
+                        title: Morning run
+                        notes: Park loop
+                      - id: task-0012
+                        userId: user-001
+                        date: '2026-05-01'
+                        startTime: '09:00'
+                        endTime: '09:30'
+                        title: Breakfast
+                        notes: Protein smoothie
+                      - id: task-0013
+                        userId: user-001
+                        date: '2026-05-01'
+                        startTime: '10:00'
+                        endTime: '11:30'
+                        title: Study session
+                        notes: Review Express middleware
+        '400':
+          description: Invalid date or overlapping day schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                overlappingReplacement:
+                  value:
+                    error: ConflictError
+                    message: Provided tasks overlap within the day schedule
+                    statusCode: 400
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /tasks/day/{date}:
+    get:
+      tags:
+        - Tasks
+      summary: Get all tasks for a specific day
+      description: Returns all tasks for the authenticated user on the requested date.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DatePath'
+      responses:
+        '200':
+          description: Day schedule fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayTasksResponse'
+              examples:
+                aliceSeededDay:
+                  summary: Seeded schedule for Alice
+                  value:
+                    message: Tasks retrieved successfully
+                    date: '2026-05-01'
+                    tasks:
+                      - id: task-0001
+                        userId: user-001
+                        date: '2026-05-01'
+                        startTime: '07:00'
+                        endTime: '07:45'
+                        title: Stretching
+                        notes: Living room routine
+                      - id: task-0002
+                        userId: user-001
+                        date: '2026-05-01'
+                        startTime: '09:00'
+                        endTime: '11:00'
+                        title: API design
+                        notes: Draft routes and controllers
+                      - id: task-0003
+                        userId: user-001
+                        date: '2026-05-01'
+                        startTime: '14:00'
+                        endTime: '15:00'
+                        title: Grocery pickup
+                        notes: Buy fruit and bread
+                emptyDay:
+                  summary: No tasks for the requested day
+                  value:
+                    message: Tasks retrieved successfully
+                    date: '2026-05-04'
+                    tasks: []
+        '400':
+          description: Invalid date format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidDate:
+                  value:
+                    error: ValidationError
+                    message: Date must use YYYY-MM-DD format
+                    statusCode: 400
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    delete:
+      tags:
+        - Tasks
+      summary: Delete all tasks for a specific day
+      description: Deletes every task owned by the authenticated user for the requested date.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DatePath'
+      responses:
+        '200':
+          description: Day schedule deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteDayResponse'
+              examples:
+                deletedDay:
+                  value:
+                    message: Day tasks deleted successfully
+                    date: '2026-05-01'
+                    deletedCount: 3
+        '400':
+          description: Invalid date format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidDate:
+                  value:
+                    error: ValidationError
+                    message: Date must use YYYY-MM-DD format
+                    statusCode: 400
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: No tasks found for the day
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noTasksForDay:
+                  value:
+                    error: NotFoundError
+                    message: No tasks found for the given date
+                    statusCode: 404
+  /tasks/{taskId}:
+    put:
+      tags:
+        - Tasks
+      summary: Update a single task
+      description: |
+        Updates a task owned by the authenticated user. The update must preserve the
+        non-overlapping schedule rule for the task's date.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TaskIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+            examples:
+              updateAliceTask:
+                value:
+                  date: '2026-05-01'
+                  startTime: '14:30'
+                  endTime: '15:30'
+                  title: Grocery pickup
+                  notes: Add cleaning supplies
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+              examples:
+                updatedTask:
+                  value:
+                    message: Task updated successfully
+                    task:
+                      id: task-0003
+                      userId: user-001
+                      date: '2026-05-01'
+                      startTime: '14:30'
+                      endTime: '15:30'
+                      title: Grocery pickup
+                      notes: Add cleaning supplies
+        '400':
+          description: Invalid data or overlapping schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                overlapOnEdit:
+                  value:
+                    error: ConflictError
+                    message: Updated task overlaps an existing task for this day
+                    statusCode: 400
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingTask:
+                  value:
+                    error: NotFoundError
+                    message: Task not found
+                    statusCode: 404
+    delete:
+      tags:
+        - Tasks
+      summary: Delete a single task
+      description: Deletes one task owned by the authenticated user.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TaskIdPath'
+      responses:
+        '200':
+          description: Task deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteTaskResponse'
+              examples:
+                deletedTask:
+                  value:
+                    message: Task deleted successfully
+                    taskId: task-0003
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingTask:
+                  value:
+                    error: NotFoundError
+                    message: Task not found
+                    statusCode: 404
+  /docs:
+    get:
+      tags:
+        - Docs
+      summary: Render Swagger UI
+      description: Renders the interactive Swagger UI for this API specification.
+      responses:
+        '200':
+          description: Swagger UI HTML rendered successfully
+          content:
+            text/html:
+              schema:
+                type: string
+              examples:
+                htmlResponse:
+                  value: <!doctype html><html><head><title>Daily Planner API Docs</title></head><body>Swagger UI</body></html>
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    DatePath:
+      name: date
+      in: path
+      required: true
+      description: Planner date in YYYY-MM-DD format
+      schema:
+        type: string
+        format: date
+    TaskIdPath:
+      name: taskId
+      in: path
+      required: true
+      description: Task identifier
+      schema:
+        type: string
+  responses:
+    UnauthorizedError:
+      description: Missing, invalid, or expired JWT token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missingToken:
+              value:
+                error: AuthenticationError
+                message: Authorization token is required
+                statusCode: 401
+            invalidToken:
+              value:
+                error: AuthenticationError
+                message: Invalid or expired token
+                statusCode: 401
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: diego
+        password:
+          type: string
+          example: planner123
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: alice
+        password:
+          type: string
+          example: planner123
+    AuthenticatedUser:
+      type: object
+      required:
+        - id
+        - username
+      properties:
+        id:
+          type: string
+          example: user-001
+        username:
+          type: string
+          example: alice
+    AuthSuccessResponse:
+      type: object
+      required:
+        - message
+        - user
+      properties:
+        message:
+          type: string
+          example: User registered successfully
+        user:
+          $ref: '#/components/schemas/AuthenticatedUser'
+    LoginSuccessResponse:
+      type: object
+      required:
+        - message
+        - token
+        - user
+      properties:
+        message:
+          type: string
+          example: Login successful
+        token:
+          type: string
+          example: <jwt-token>
+        user:
+          $ref: '#/components/schemas/AuthenticatedUser'
+    Task:
+      type: object
+      required:
+        - id
+        - userId
+        - date
+        - startTime
+        - endTime
+        - title
+      properties:
+        id:
+          type: string
+          example: task-0001
+        userId:
+          type: string
+          example: user-001
+        date:
+          type: string
+          format: date
+          example: '2026-05-01'
+        startTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):([0-5]\\d)$'
+          example: '09:00'
+        endTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):([0-5]\\d)$'
+          example: '11:00'
+        title:
+          type: string
+          example: API design
+        notes:
+          type: string
+          example: Draft routes and controllers
+    CreateTaskRequest:
+      type: object
+      required:
+        - date
+        - startTime
+        - endTime
+        - title
+      properties:
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):([0-5]\\d)$'
+        endTime:
+          type: string
+          pattern: '^([01]\\d|2[0-3]):([0-5]\\d)$'
+        title:
+          type: string
+        notes:
+          type: string
+    UpdateTaskRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateTaskRequest'
+    ReplaceDayRequest:
+      type: object
+      required:
+        - date
+        - tasks
+      properties:
+        date:
+          type: string
+          format: date
+        tasks:
+          type: array
+          items:
+            type: object
+            required:
+              - startTime
+              - endTime
+              - title
+            properties:
+              startTime:
+                type: string
+                pattern: '^([01]\\d|2[0-3]):([0-5]\\d)$'
+              endTime:
+                type: string
+                pattern: '^([01]\\d|2[0-3]):([0-5]\\d)$'
+              title:
+                type: string
+              notes:
+                type: string
+    TaskResponse:
+      type: object
+      required:
+        - message
+        - task
+      properties:
+        message:
+          type: string
+          example: Task created successfully
+        task:
+          $ref: '#/components/schemas/Task'
+    DayTasksResponse:
+      type: object
+      required:
+        - message
+        - date
+        - tasks
+      properties:
+        message:
+          type: string
+          example: Tasks retrieved successfully
+        date:
+          type: string
+          format: date
+          example: '2026-05-01'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+    DeleteTaskResponse:
+      type: object
+      required:
+        - message
+        - taskId
+      properties:
+        message:
+          type: string
+          example: Task deleted successfully
+        taskId:
+          type: string
+          example: task-0003
+    DeleteDayResponse:
+      type: object
+      required:
+        - message
+        - date
+        - deletedCount
+      properties:
+        message:
+          type: string
+          example: Day tasks deleted successfully
+        date:
+          type: string
+          format: date
+          example: '2026-05-01'
+        deletedCount:
+          type: integer
+          example: 3
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - statusCode
+      properties:
+        error:
+          type: string
+          example: ValidationError
+        message:
+          type: string
+          example: Username already exists
+        statusCode:
+          type: integer
+          example: 400
