@@ -1,0 +1,7 @@
+interface:
+  display_name: "Supertest API Tests"
+  short_description: "Reusable Supertest live-endpoint API test pattern"
+  default_prompt: "Use $supertest-api-tests to create or update automated API tests for this project using the repo's live-endpoint, helper, fixture, hook, and .env patterns."
+
+policy:
+  allow_implicit_invocation: true
