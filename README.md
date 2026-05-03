@@ -15,7 +15,7 @@ Express REST API for a daily planner application with JWT authentication, in-mem
 ## Stack
 
 - Backend: Node.js + Express
-- Frontend: React + Vite
+- Frontend: React + Vite - COMING SOON
 - API documentation: Swagger UI + `docs/swagger.yaml`
 - Authentication: JSON Web Tokens (`jsonwebtoken`)
 - Test stack: Mocha + Chai + Supertest + Mochawesome
