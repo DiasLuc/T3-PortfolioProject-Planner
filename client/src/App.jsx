@@ -18,8 +18,31 @@ const DEMO_USERS = [
   "bruno / planner123",
   "carla / planner123"
 ];
-const TIMELINE_HOURS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00"];
 const TASK_COLORS = ["#22c55e", "#f59e0b", "#0ea5e9", "#a855f7", "#fb7185", "#6366f1"];
+const TIMELINE_START_HOUR = 8;
+const TIMELINE_END_HOUR = 15;
+const TIMELINE_SCALE = 1.35;
+const TIMELINE_ROW_HEIGHT = 81;
+const TIMELINE_TOP_PADDING = 28;
+const TIMELINE_BOTTOM_PADDING = 42;
+const TIMELINE_LEFT_OFFSET = 96;
+const TIMELINE_RIGHT_OFFSET = 24;
+const TIMELINE_GAP = 12;
+const TIMELINE_MIN_CARD_HEIGHT = 64;
+
+function shiftDate(dateString, days) {
+  const date = new Date(`${dateString}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getNavModeForDate(dateString) {
+  if (dateString === DEFAULT_DAY) {
+    return "today";
+  }
+
+  return dateString < DEFAULT_DAY ? "past" : "upcoming";
+}
 
 function makeTaskForm(date = DEFAULT_DAY) {
   return {
@@ -68,6 +91,11 @@ function getTaskDurationMinutes(startTime, endTime) {
   const [startHour, startMinute] = startTime.split(":").map(Number);
   const [endHour, endMinute] = endTime.split(":").map(Number);
   return endHour * 60 + endMinute - (startHour * 60 + startMinute);
+}
+
+function toMinutes(timeString) {
+  const [hours, minutes] = timeString.split(":").map(Number);
+  return hours * 60 + minutes;
 }
 
 function summarizeHours(tasks) {
@@ -152,30 +180,66 @@ function buildReplaceDraft(tasks, date) {
   }));
 }
 
-function getTaskTop(startTime) {
-  const [hours, minutes] = startTime.split(":").map(Number);
-  const minutesFromEight = (hours - 8) * 60 + minutes;
-  return Math.max(42, 42 + minutesFromEight * 1.43);
+function getTimelineMetrics(tasks) {
+  const baseMinutes = TIMELINE_START_HOUR * 60;
+  const totalMinutes = (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * 60;
+  const lines = [];
+
+  for (let hour = TIMELINE_START_HOUR; hour <= TIMELINE_END_HOUR - 1; hour += 1) {
+    lines.push({
+      label: `${String(hour).padStart(2, "0")}:00`,
+      top: TIMELINE_TOP_PADDING + (hour - TIMELINE_START_HOUR) * TIMELINE_ROW_HEIGHT
+    });
+  }
+
+  const positionedTasks = [];
+  let previousBottom = TIMELINE_TOP_PADDING;
+
+  tasks.forEach((task, index) => {
+    const startMinutes = toMinutes(task.startTime);
+    const naturalTop = TIMELINE_TOP_PADDING + (startMinutes - baseMinutes) * TIMELINE_SCALE;
+    const top = Math.max(naturalTop, previousBottom + TIMELINE_GAP);
+    const height = Math.max(
+      TIMELINE_MIN_CARD_HEIGHT,
+      getTaskDurationMinutes(task.startTime, task.endTime) * TIMELINE_SCALE
+    );
+
+    positionedTasks.push({
+      ...task,
+      layoutTop: top,
+      layoutHeight: height,
+      accentColor: TASK_COLORS[index % TASK_COLORS.length]
+    });
+
+    previousBottom = top + height;
+  });
+
+  const contentHeight = Math.max(
+    TIMELINE_TOP_PADDING + totalMinutes * TIMELINE_SCALE + TIMELINE_BOTTOM_PADDING,
+    previousBottom + TIMELINE_BOTTOM_PADDING
+  );
+
+  return {
+    lines,
+    contentHeight,
+    positionedTasks
+  };
 }
 
-function getTaskHeight(startTime, endTime) {
-  return Math.max(86, getTaskDurationMinutes(startTime, endTime) * 1.43);
-}
-
-function TaskCard({ task, index, compact = false, onEdit }) {
+function TaskCard({ task, index, compact = false, isSelected = false, onEdit }) {
   const accentColor = TASK_COLORS[index % TASK_COLORS.length];
   const style = compact
     ? {
-        top: `${getTaskTop(task.startTime)}px`,
-        height: `${getTaskHeight(task.startTime, task.endTime)}px`,
-        left: `${120 + (index % 2) * 44}px`,
-        width: `${index % 2 === 0 ? 650 : 586}px`
+        top: `${task.layoutTop}px`,
+        height: `${task.layoutHeight}px`,
+        left: `${TIMELINE_LEFT_OFFSET}px`,
+        right: `${TIMELINE_RIGHT_OFFSET}px`
       }
     : {};
 
   return (
     <button
-      className={`task-card ${compact ? "task-card--timeline" : ""}`}
+      className={`task-card ${compact ? "task-card--timeline" : ""} ${isSelected ? "is-selected" : ""}`}
       onClick={() => onEdit(task)}
       style={style}
       type="button"
@@ -299,17 +363,21 @@ function AuthView({
 }
 
 function PlannerAside({
+  navMode,
   selectedDate,
   session,
   tasks,
+  onCompletedNotes,
   onLogout,
-  onReplaceDay
+  onPastDays,
+  onToday,
+  onUpcoming
 }) {
   const navItems = [
-    { label: "Today", active: true, action: null },
-    { label: "Past days", active: false, action: null },
-    { label: "Upcoming", active: false, action: null },
-    { label: "Completed notes", active: false, action: null },
+    { label: "Today", active: navMode === "today", action: onToday },
+    { label: "Past days", active: navMode === "past", action: onPastDays },
+    { label: "Upcoming", active: navMode === "upcoming", action: onUpcoming },
+    { label: "Completed notes", active: navMode === "completed", action: onCompletedNotes },
     { label: "API docs", active: false, href: "/docs" }
   ];
 
@@ -338,7 +406,7 @@ function PlannerAside({
               <button
                 className={`planner-nav__item ${item.active ? "is-active" : ""}`}
                 key={item.label}
-                onClick={item.label === "Completed notes" ? onReplaceDay : undefined}
+                onClick={item.action}
                 type="button"
               >
                 {item.label}
@@ -381,11 +449,11 @@ function PlannerRules({ selectedDate, emptyDay }) {
   );
 }
 
-function EditorContextTaskCard({ task, index, stateLabel, onEdit }) {
+function EditorContextTaskCard({ task, index, stateLabel, isSelected = false, onEdit }) {
   const accentColor = TASK_COLORS[index % TASK_COLORS.length];
 
   return (
-    <button className="editor-context-card" onClick={() => onEdit(task)} type="button">
+    <button className={`editor-context-card ${isSelected ? "is-selected" : ""}`} onClick={() => onEdit(task)} type="button">
       <span className="editor-context-card__accent" style={{ backgroundColor: accentColor }} />
       <span className="editor-context-card__time">{describeRange(task.startTime, task.endTime)}</span>
       <strong className="editor-context-card__title">{task.title}</strong>
@@ -394,13 +462,15 @@ function EditorContextTaskCard({ task, index, stateLabel, onEdit }) {
   );
 }
 
-function TimelinePanel({ tasks, tasksLoading, onEdit }) {
+function TimelinePanel({ tasks, tasksLoading, selectedTaskId, onEdit }) {
+  const { lines, contentHeight, positionedTasks } = getTimelineMetrics(tasks);
+
   return (
     <section className="timeline-shell">
-      <div className="timeline-grid">
-        {TIMELINE_HOURS.map((hour, index) => (
-          <div className="timeline-slot" key={hour} style={{ top: `${20 + index * 86}px` }}>
-            <span className="timeline-slot__label">{hour}</span>
+      <div className="timeline-grid" style={{ height: `${contentHeight}px` }}>
+        {lines.map((line) => (
+          <div className="timeline-slot" key={line.label} style={{ top: `${line.top}px` }}>
+            <span className="timeline-slot__label">{line.label}</span>
             <span className="timeline-slot__line" />
           </div>
         ))}
@@ -416,8 +486,15 @@ function TimelinePanel({ tasks, tasksLoading, onEdit }) {
             <p>Use the add-task action or replace the whole day in one API call.</p>
           </div>
         ) : (
-          tasks.map((task, index) => (
-            <TaskCard compact index={index} key={task.id} onEdit={onEdit} task={task} />
+          positionedTasks.map((task, index) => (
+            <TaskCard
+              compact
+              index={index}
+              isSelected={task.id === selectedTaskId}
+              key={task.id}
+              onEdit={onEdit}
+              task={task}
+            />
           ))
         )}
       </div>
@@ -607,7 +684,57 @@ function DrawerReplaceDay({
   );
 }
 
+function ReplaceDayState({
+  selectedDate,
+  tasks,
+  draftRows,
+  draftError,
+  saving,
+  onAddRow,
+  onChangeRow,
+  onClose,
+  onEditTask,
+  onRemoveRow,
+  onSave
+}) {
+  return (
+    <section className="editor-layout">
+      <div className="editor-layout__left">
+        <header className="editor-context-header">
+          <h1>Selected day: {formatDisplayDate(selectedDate)}</h1>
+          <p>Replace the full schedule while keeping the existing day visible for reference.</p>
+        </header>
+
+        <div className="editor-context-list">
+          {tasks.map((task, index) => (
+            <EditorContextTaskCard
+              index={index}
+              key={task.id}
+              onEdit={onEditTask}
+              stateLabel="Existing scheduled task"
+              task={task}
+            />
+          ))}
+        </div>
+      </div>
+
+      <DrawerReplaceDay
+        draftError={draftError}
+        draftRows={draftRows}
+        onAddRow={onAddRow}
+        onChangeRow={onChangeRow}
+        onClose={onClose}
+        onRemoveRow={onRemoveRow}
+        onSave={onSave}
+        saving={saving}
+        selectedDate={selectedDate}
+      />
+    </section>
+  );
+}
+
 function PlannerStage({
+  navMode,
   selectedDate,
   session,
   tasks,
@@ -620,38 +747,37 @@ function PlannerStage({
   localConflict,
   drawerSaving,
   onLogout,
+  onCompletedNotes,
   onReplaceDay,
   onCreateTask,
   onEditTask,
   onDeleteDay,
   onSelectDate,
+  onPastDays,
+  onToday,
+  onUpcoming,
   onEditorChange,
   onEditorSave,
   onEditorDelete,
   onCloseEditor
 }) {
   const isTaskEditorOpen = Boolean(editorMode) && editorMode !== "replace";
-  const orderedEditorTasks = localConflict
-    ? [
-        ...tasks.filter((task) => task.id === localConflict.id),
-        ...tasks.filter((task) => task.id === editorForm.id),
-        ...tasks.filter((task) => task.id !== localConflict.id && task.id !== editorForm.id)
-      ]
-    : [
-        ...tasks.filter((task) => task.id === editorForm.id),
-        ...tasks.filter((task) => task.id !== editorForm.id)
-      ];
+  const orderedEditorTasks = [...tasks].sort((left, right) => left.startTime.localeCompare(right.startTime));
 
   return (
     <div className={`screen screen--planner ${editorMode ? "has-editor-open" : ""}`}>
       <div className="planner-canvas">
         <div className="planner-shell">
           <PlannerAside
+            navMode={navMode}
             selectedDate={selectedDate}
             session={session}
             tasks={tasks}
+            onCompletedNotes={onCompletedNotes}
             onLogout={onLogout}
-            onReplaceDay={onReplaceDay}
+            onPastDays={onPastDays}
+            onToday={onToday}
+            onUpcoming={onUpcoming}
           />
 
           <section className="planner-main">
@@ -680,6 +806,7 @@ function PlannerStage({
                       return (
                         <EditorContextTaskCard
                           index={index}
+                          isSelected={task.id === editorForm.id}
                           key={task.id}
                           onEdit={onEditTask}
                           stateLabel={stateLabel}
@@ -730,7 +857,12 @@ function PlannerStage({
                 {tasksError ? <div className="banner banner--error">{tasksError}</div> : null}
 
                 <div className="planner-body">
-                  <TimelinePanel onEdit={onEditTask} tasks={tasks} tasksLoading={tasksLoading} />
+                  <TimelinePanel
+                    onEdit={onEditTask}
+                    selectedTaskId={editorMode === "edit" ? editorForm.id : null}
+                    tasks={tasks}
+                    tasksLoading={tasksLoading}
+                  />
 
                   <div className="planner-sidecluster">
                     <PlannerRules emptyDay={tasks.length === 0} selectedDate={selectedDate} />
@@ -760,6 +892,7 @@ function App() {
   const [authError, setAuthError] = useState("");
   const [session, setSession] = useState(null);
   const [selectedDate, setSelectedDate] = useState(DEFAULT_DAY);
+  const [navMode, setNavMode] = useState("today");
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState("");
@@ -863,6 +996,7 @@ function App() {
           user: response.user
         });
         setSelectedDate(DEFAULT_DAY);
+        setNavMode("today");
         setNotice(`Welcome back, ${response.user.username}.`);
       }
     } catch (error) {
@@ -906,6 +1040,33 @@ function App() {
   function handleEditorFieldChange(event) {
     const { name, value } = event.target;
     setEditorForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function handleDateSelection(nextDate, nextMode = getNavModeForDate(nextDate)) {
+    closeDrawer();
+    setSelectedDate(nextDate);
+    setNavMode(nextMode);
+  }
+
+  function handleTodayView() {
+    handleDateSelection(DEFAULT_DAY, "today");
+    setNotice("");
+  }
+
+  function handlePastDaysView() {
+    handleDateSelection(shiftDate(selectedDate, -1), "past");
+    setNotice("");
+  }
+
+  function handleUpcomingView() {
+    handleDateSelection(shiftDate(selectedDate, 1), "upcoming");
+    setNotice("");
+  }
+
+  function handleCompletedNotesView() {
+    const previousDate = shiftDate(selectedDate, -1);
+    handleDateSelection(previousDate, "completed");
+    setNotice(`Reviewing completed notes for ${formatCompactDate(previousDate)}.`);
   }
 
   async function refreshDay(message, dateOverride = selectedDate) {
@@ -1082,7 +1243,9 @@ function App() {
         editorForm={editorForm}
         editorMode={editorMode}
         localConflict={localConflict}
+        navMode={navMode}
         notice={notice}
+        onCompletedNotes={handleCompletedNotesView}
         onCreateTask={openCreateDrawer}
         onDeleteDay={handleDeleteDay}
         onEditorChange={handleEditorFieldChange}
@@ -1092,7 +1255,10 @@ function App() {
         onLogout={handleLogout}
         onCloseEditor={closeDrawer}
         onReplaceDay={openReplaceDrawer}
-        onSelectDate={setSelectedDate}
+        onPastDays={handlePastDaysView}
+        onSelectDate={handleDateSelection}
+        onToday={handleTodayView}
+        onUpcoming={handleUpcomingView}
         selectedDate={selectedDate}
         session={session}
         tasks={tasks}
@@ -1101,17 +1267,19 @@ function App() {
       />
 
       {editorMode === "replace" ? (
-        <div className="editor-stage">
-          <DrawerReplaceDay
+        <div className="replace-stage">
+          <ReplaceDayState
             draftError={draftError}
             draftRows={draftRows}
             onAddRow={handleAddDraftRow}
             onChangeRow={handleDraftRowChange}
             onClose={closeDrawer}
+            onEditTask={openEditDrawer}
             onRemoveRow={handleRemoveDraftRow}
             onSave={handleReplaceDay}
             saving={drawerSaving}
             selectedDate={selectedDate}
+            tasks={[...tasks].sort((left, right) => left.startTime.localeCompare(right.startTime))}
           />
         </div>
       ) : null}

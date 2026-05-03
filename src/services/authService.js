@@ -5,7 +5,11 @@ const { AppError } = require("../utils/errors");
 const { sanitizeUser } = require("../utils/sanitize");
 const { validateUsernameAndPassword } = require("../utils/validation");
 
-const JWT_SECRET = process.env.JWT_SECRET || "daily-planner-secret";
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET must be defined in the .env file.");
+}
+
+const { JWT_SECRET } = process.env;
 
 function register({ username, password }) {
   validateUsernameAndPassword(username, password);

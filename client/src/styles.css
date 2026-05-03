@@ -368,6 +368,11 @@ input.is-danger {
   position: relative;
 }
 
+.replace-stage {
+  position: absolute;
+  inset: 48px;
+}
+
 .screen--planner {
   background: linear-gradient(90deg, var(--bg-planner-start) 0%, var(--bg-planner-end) 100%);
   border-radius: 32px;
@@ -512,14 +517,14 @@ input.is-danger {
 }
 
 .timeline-grid {
-  height: 650px;
+  min-height: 650px;
   position: relative;
 }
 
 .timeline-slot {
   position: absolute;
   left: 0;
-  right: 20px;
+  right: 0;
   height: 20px;
 }
 
@@ -535,7 +540,7 @@ input.is-danger {
 .timeline-slot__line {
   position: absolute;
   left: 96px;
-  right: 20px;
+  right: 24px;
   top: 8px;
   height: 1px;
   background: var(--border-soft);
@@ -555,6 +560,11 @@ input.is-danger {
 
 .task-card--timeline {
   position: absolute;
+}
+
+.task-card.is-selected {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), 0 8px 20px rgba(15, 23, 42, 0.04);
 }
 
 .task-card__accent {
@@ -643,15 +653,6 @@ input.is-danger {
 .planner-quick-actions {
   display: grid;
   gap: 12px;
-}
-
-.editor-stage {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  display: flex;
-  justify-content: flex-end;
-  padding: 64px;
 }
 
 .has-editor-open .planner-canvas::after {
@@ -798,6 +799,11 @@ input.is-danger {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
 }
 
+.editor-context-card.is-selected {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
 .editor-context-card__accent {
   position: absolute;
   left: 16px;
@@ -877,6 +883,11 @@ input.is-danger {
   .editor-drawer {
     width: 100%;
     min-height: auto;
+  }
+
+  .replace-stage {
+    position: static;
+    inset: auto;
   }
 }
 

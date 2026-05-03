@@ -21,7 +21,7 @@ Follow this sequence:
 
 - Each test case should represent a possible variation of the API use based on the acceptance criteria of the user story.
 - Each test case should be represented by a Jira subtask under the user story, with the prefix `[Test Case]`.
-- Each test case should include the sections `Title`, `Operation (Method and Endpoint)`, `Request Body` (if applicable), `Response Status Code`, and `Response Body` (if applicable).
+- Each test case should include the sections `Title`, `Operation (Method and Endpoint)`, `Request Parameters / Headers` (if applicable), `Request Body` (if applicable), `Response Status Code`, and `Response Body` (if applicable).
 - Each test case should check response codes against their usually expected results, not only against the current project specs or implementation. Example: if trying to register an email that is already registered, the common choice is `409 Conflict`, so the test case should expect `409` even if the current spec and/or code say `400`.
 
 ## Working Notes
@@ -40,6 +40,13 @@ Title
 
 Operation (Method and Endpoint)
 `<METHOD /path>`
+
+Request Parameters / Headers
+```text
+Path params: ...
+Query params: ...
+Headers: ...
+```
 
 Request Body
 ```json
