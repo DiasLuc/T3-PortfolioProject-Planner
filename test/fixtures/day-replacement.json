@@ -1,0 +1,11 @@
+{
+  "date": "2026-05-01",
+  "tasks": [
+    {
+      "startTime": "08:00",
+      "endTime": "09:00",
+      "title": "Morning run",
+      "notes": "Park loop"
+    }
+  ]
+}
