@@ -3,6 +3,7 @@
 Express REST API for a daily planner application with JWT authentication, in-memory storage, layered architecture, Swagger documentation, and Jira-aligned API test coverage.
 
 Project status tracking:[Jira](https://diasluc.atlassian.net/jira/software/projects/KAN/boards/1)
+
 Check out the AI skills created to aid in creating test cases and automated tests inside the `.codex` folder!
 ## Features
 
