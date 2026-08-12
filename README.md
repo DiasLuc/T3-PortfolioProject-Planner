@@ -18,7 +18,7 @@ Check out the AI skills created to aid in creating test cases and automated test
 ## Stack
 
 - Backend: Node.js + Express
-- Frontend: React + Vite - COMING SOON
+- Frontend: React + Vite (separate repo: T4-PortfolioProject-Planner-Web)
 - API documentation: Swagger UI + `docs/swagger.yaml`
 - Authentication: JSON Web Tokens (`jsonwebtoken`)
 - Test stack: Mocha + Chai + Supertest + Mochawesome
